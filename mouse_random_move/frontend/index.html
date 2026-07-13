@@ -1,0 +1,57 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mouse Random Move Test</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="header">
+    <div>
+      <p class="eyebrow">LOCAL INPUT HARNESS</p>
+      <h1>Mouse Random Move Test</h1>
+      <p>此页面只在 <code>127.0.0.1</code> 运行，用于确认选定 Chrome 窗口是否收到输入。</p>
+    </div>
+    <div id="connectionBadge" class="badge">正在连接桌面端</div>
+  </header>
+
+  <main class="layout">
+    <section id="interactionZone" class="interaction-zone" tabindex="0" aria-label="交互测试区域">
+      <div class="crosshair" aria-hidden="true"></div>
+      <div class="zone-copy">
+        <h2>交互测试区域</h2>
+        <p>鼠标移动、单击、滚轮和键盘事件会在这里被记录。</p>
+        <p class="focus-state">焦点：<strong id="focusValue">未获得</strong></p>
+        <p class="typed-label">接收到的字符</p>
+        <output id="typedBuffer" class="typed-buffer">-</output>
+      </div>
+      <div id="pointerReadout" class="pointer-readout">x: - / y: -</div>
+    </section>
+
+    <aside class="sidebar">
+      <section class="panel">
+        <h2>事件计数</h2>
+        <div class="counter-grid">
+          <div><span>mousemove</span><strong id="countMousemove">0</strong></div>
+          <div><span>click</span><strong id="countClick">0</strong></div>
+          <div><span>wheel</span><strong id="countWheel">0</strong></div>
+          <div><span>keydown</span><strong id="countKeydown">0</strong></div>
+          <div><span>blur</span><strong id="countBlur">0</strong></div>
+        </div>
+      </section>
+
+      <section class="panel log-panel">
+        <div class="panel-title-row">
+          <h2>最近事件</h2>
+          <button id="clearButton" type="button">清空</button>
+        </div>
+        <ol id="eventLog" class="event-log"></ol>
+      </section>
+    </aside>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>
+
