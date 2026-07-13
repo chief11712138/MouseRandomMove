@@ -44,10 +44,10 @@ class MouseRandomMoveApp:
         self.min_delay = tk.StringVar(value="10")
         self.max_delay = tk.StringVar(value="20")
         self.duration_minutes = tk.StringVar(value="0")
-        self.enable_move = tk.BooleanVar(value=False)
-        self.enable_click = tk.BooleanVar(value=False)
-        self.enable_wheel = tk.BooleanVar(value=False)
-        self.enable_keyboard = tk.BooleanVar(value=False)
+        self.enable_move = tk.BooleanVar(value=True)
+        self.enable_click = tk.BooleanVar(value=True)
+        self.enable_wheel = tk.BooleanVar(value=True)
+        self.enable_keyboard = tk.BooleanVar(value=True)
 
         self.status_text = tk.StringVar(value="状态：已停止")
         self.next_action_text = tk.StringVar(value="下一次操作：无")
@@ -59,6 +59,7 @@ class MouseRandomMoveApp:
         self.refresh_windows()
         self._poll_browser_status()
         self.root.protocol("WM_DELETE_WINDOW", self.close)
+        self.root.after(250, self.open_test_page)
 
     def _build_ui(self) -> None:
         outer = ttk.Frame(self.root, padding=16)
