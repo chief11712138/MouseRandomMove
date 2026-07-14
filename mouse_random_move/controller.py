@@ -53,7 +53,9 @@ class SingleWindowController:
         self._last_action = action
         return ExecutionReceipt(result=result, browser_sequence_before=sequence)
 
-    def is_confirmed(self, receipt: ExecutionReceipt) -> bool:
+    def is_confirmed(self, receipt: ExecutionReceipt) -> bool | None:
+        if not receipt.result.browser_confirmation_supported:
+            return None
         return self.browser_events.has_event_after(
             receipt.result.expected_browser_event,
             receipt.browser_sequence_before,

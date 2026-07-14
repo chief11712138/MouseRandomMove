@@ -8,7 +8,7 @@ import time
 from dataclasses import asdict, dataclass
 from ctypes import wintypes
 
-from .chrome_windows import ChromeWindowService, TEST_PAGE_TITLE_MARKER
+from .chrome_windows import ChromeWindowService
 
 
 SW_RESTORE = 9
@@ -34,6 +34,7 @@ class ActionResult:
     y: int | None = None
     wheel_notches: int | None = None
     text: str = ""
+    browser_confirmation_supported: bool = False
 
     def to_log_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -88,7 +89,7 @@ if sys.platform == "win32":
 
 
 class WindowInputSender:
-    """Send one QA action to one explicitly selected test-page window."""
+    """Send one input action to one explicitly selected Chrome window."""
 
     def __init__(self, window_service: ChromeWindowService, rng: random.Random) -> None:
         if sys.platform != "win32":
@@ -104,8 +105,8 @@ class WindowInputSender:
         target = self.window_service.inspect(hwnd)
         if target is None:
             raise TargetWindowError("选定的 Chrome 窗口已经关闭或不可用。")
-        if TEST_PAGE_TITLE_MARKER not in target.title:
-            raise TargetWindowError("选定窗口不再是 Mouse Random Move 本地测试页面，操作已停止。")
+
+        confirmation_supported = target.is_test_page
 
         self._activate(hwnd)
         left, top, right, bottom = self._get_safe_page_area(hwnd)
@@ -115,10 +116,11 @@ class WindowInputSender:
             self._set_cursor(x, y)
             return ActionResult(
                 action="move",
-                description=f"移动测试指针到 ({x}, {y})",
+                description=f"移动指针到目标页面 ({x}, {y})",
                 expected_browser_event="mousemove",
                 x=x,
                 y=y,
+                browser_confirmation_supported=confirmation_supported,
             )
 
         if action == "click":
@@ -126,10 +128,11 @@ class WindowInputSender:
             self._mouse_click()
             return ActionResult(
                 action="click",
-                description=f"在测试区域 ({x}, {y}) 单击",
+                description=f"在目标页面 ({x}, {y}) 单击",
                 expected_browser_event="click",
                 x=x,
                 y=y,
+                browser_confirmation_supported=confirmation_supported,
             )
 
         if action == "wheel":
@@ -139,11 +142,12 @@ class WindowInputSender:
             direction = "向上" if notches > 0 else "向下"
             return ActionResult(
                 action="wheel",
-                description=f"在测试区域 ({x}, {y}) {direction}滚动 {abs(notches)} 格",
+                description=f"在目标页面 ({x}, {y}) {direction}滚动 {abs(notches)} 格",
                 expected_browser_event="wheel",
                 x=x,
                 y=y,
                 wheel_notches=notches,
+                browser_confirmation_supported=confirmation_supported,
             )
 
         if action == "keyboard":
@@ -157,11 +161,12 @@ class WindowInputSender:
             self._send_ascii_text(text)
             return ActionResult(
                 action="keyboard",
-                description=f'向测试页面发送字符 "{text}"',
+                description=f'向目标页面发送字符 "{text}"',
                 expected_browser_event="keydown",
                 x=x,
                 y=y,
                 text=text,
+                browser_confirmation_supported=confirmation_supported,
             )
 
         raise ValueError(f"Unknown action: {action}")
@@ -171,7 +176,7 @@ class WindowInputSender:
         self.user32.ShowWindow(native, SW_RESTORE)
         self.user32.BringWindowToTop(native)
         if not self.user32.SetForegroundWindow(native):
-            raise TargetWindowError("Windows 阻止了目标窗口激活。请手动点击测试页面后重试。")
+            raise TargetWindowError("Windows 阻止了目标窗口激活。请手动点击目标 Chrome 窗口后重试。")
         time.sleep(0.18)
 
     def _get_safe_page_area(self, hwnd: int) -> tuple[int, int, int, int]:
@@ -196,7 +201,7 @@ class WindowInputSender:
         bottom = origin.y + height - max(70, int(height * 0.12))
 
         if right <= left or bottom <= top:
-            raise TargetWindowError("无法计算测试页面的安全操作区域。")
+            raise TargetWindowError("无法计算目标页面的安全操作区域。")
         return left, top, right, bottom
 
     def _next_point(
