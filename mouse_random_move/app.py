@@ -282,6 +282,17 @@ class MouseRandomMoveApp:
         if config is None or target is None:
             return
 
+        try:
+            self.sender.focus(target.hwnd)
+        except (OSError, TargetWindowError) as exc:
+            self.last_action_text.set(f"无法自动聚焦目标窗口：{exc}")
+            self.logger.write(
+                "focus_error",
+                {"target_title": target.title, "error": str(exc)},
+            )
+            messagebox.showerror("自动聚焦失败", str(exc), parent=self.root)
+            return
+
         self.controller.lock_target(target.hwnd)
         self.server.store.set_active(True)
         self.running = True
@@ -292,10 +303,15 @@ class MouseRandomMoveApp:
         )
         self._set_target_controls_enabled(False)
         self.start_button.configure(text="运行中")
-        self.status_text.set(f"状态：运行中；单一目标：{target.title}")
+        self.status_text.set(f"状态：运行中；已自动聚焦：{target.title}")
         self.logger.write(
             "start",
-            {"target_title": target.title, "single_window": True, **config.to_log_dict()},
+            {
+                "target_title": target.title,
+                "single_window": True,
+                "auto_focused": True,
+                **config.to_log_dict(),
+            },
         )
         self._schedule_next(config)
 

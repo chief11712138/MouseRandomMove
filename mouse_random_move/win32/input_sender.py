@@ -171,13 +171,23 @@ class WindowInputSender:
 
         raise ValueError(f"Unknown action: {action}")
 
+    def focus(self, hwnd: int) -> None:
+        """Bring the selected Chrome window to the foreground without sending input."""
+        if self.window_service.inspect(hwnd) is None:
+            raise TargetWindowError("选定的 Chrome 窗口已经关闭或不可用。")
+        self._activate(hwnd)
+
     def _activate(self, hwnd: int) -> None:
         native = wintypes.HWND(hwnd)
         self.user32.ShowWindow(native, SW_RESTORE)
         self.user32.BringWindowToTop(native)
-        if not self.user32.SetForegroundWindow(native):
-            raise TargetWindowError("Windows 阻止了目标窗口激活。请手动点击目标 Chrome 窗口后重试。")
+        self.user32.SetForegroundWindow(native)
         time.sleep(0.18)
+        if int(self.user32.GetForegroundWindow() or 0) != hwnd:
+            raise TargetWindowError(
+                "Windows 阻止了目标 Chrome 窗口自动获得焦点。"
+                "请确认桌面未锁定，并且目标窗口与本程序位于同一桌面会话。"
+            )
 
     def _get_safe_page_area(self, hwnd: int) -> tuple[int, int, int, int]:
         rect = RECT()
@@ -273,6 +283,8 @@ class WindowInputSender:
         self.user32.BringWindowToTop.restype = wintypes.BOOL
         self.user32.SetForegroundWindow.argtypes = [wintypes.HWND]
         self.user32.SetForegroundWindow.restype = wintypes.BOOL
+        self.user32.GetForegroundWindow.argtypes = []
+        self.user32.GetForegroundWindow.restype = wintypes.HWND
         self.user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT)]
         self.user32.GetClientRect.restype = wintypes.BOOL
         self.user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
