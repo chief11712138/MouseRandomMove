@@ -24,6 +24,8 @@ class AppStartFocusTests(unittest.TestCase):
         app.server = SimpleNamespace(store=Mock())
         app._set_target_controls_enabled = Mock()
         app.start_button = Mock()
+        app.start_button_text = Mock()
+        app._update_run_visual = Mock()
         app.status_text = Mock()
         app.last_action_text = Mock()
         app.logger = Mock()
@@ -53,6 +55,64 @@ class AppStartFocusTests(unittest.TestCase):
         app._schedule_next.assert_not_called()
         self.assertFalse(app.running)
         showerror.assert_called_once()
+
+
+class AppWindowPreferenceTests(unittest.TestCase):
+    def test_always_on_top_uses_selected_value(self) -> None:
+        app = MouseRandomMoveApp.__new__(MouseRandomMoveApp)
+        app.root = Mock()
+        app.always_on_top = Mock()
+        app.always_on_top.get.return_value = True
+
+        app._set_always_on_top()
+
+        app.root.attributes.assert_called_once_with("-topmost", True)
+
+    def test_opacity_is_clamped_and_applied(self) -> None:
+        app = MouseRandomMoveApp.__new__(MouseRandomMoveApp)
+        app.root = Mock()
+        app.opacity_text = Mock()
+
+        app._set_opacity("20")
+
+        app.opacity_text.set.assert_called_once_with("透明度 40%")
+        app.root.attributes.assert_called_once_with("-alpha", 0.4)
+
+    @patch("mouse_random_move.app.messagebox.showinfo")
+    def test_help_is_available_in_a_dialog(self, showinfo: Mock) -> None:
+        app = MouseRandomMoveApp.__new__(MouseRandomMoveApp)
+        app.root = Mock()
+        app.server = SimpleNamespace(url="http://127.0.0.1")
+        app.logger = SimpleNamespace(log_dir="logs")
+
+        app._show_help()
+
+        showinfo.assert_called_once()
+
+    def test_simple_mode_preserves_timer_and_controller_state(self) -> None:
+        app = MouseRandomMoveApp.__new__(MouseRandomMoveApp)
+        app.ui_mode = Mock()
+        app.full_view = Mock()
+        app.simple_view = Mock()
+        app.header = Mock()
+        app.simple_mode_button = Mock()
+        app.full_mode_button = Mock()
+        app.always_on_top = Mock()
+        app._set_always_on_top = Mock()
+        app._resize_window = Mock()
+        app._simple_window_size = (540, 390)
+        app._full_window_size = (1240, 720)
+        app._schedule_job = "timer-42"
+        app.controller = Mock()
+
+        app._set_ui_mode("simple")
+
+        self.assertEqual(app._schedule_job, "timer-42")
+        app.controller.assert_not_called()
+        app.header.pack_forget.assert_called_once()
+        app.simple_view.pack.assert_called_once_with(fill="both", expand=True)
+        app._resize_window.assert_called_once_with((540, 390), anchor_right=True)
+        app.always_on_top.set.assert_called_once_with(True)
 
 
 if __name__ == "__main__":

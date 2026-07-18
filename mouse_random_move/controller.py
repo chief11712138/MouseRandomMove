@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import random
 from dataclasses import dataclass
@@ -49,7 +49,14 @@ class SingleWindowController:
         candidates = tuple(action for action in enabled_actions if action != self._last_action)
         action = self.rng.choice(candidates or enabled_actions)
         sequence = int(self.browser_events.snapshot()["sequence"])
-        result = self.sender.send(self._target_hwnd, action)
+        if action == "keyboard" and config.shortcut_text:
+            result = self.sender.send(
+                self._target_hwnd,
+                action,
+                shortcut=config.shortcut_text,
+            )
+        else:
+            result = self.sender.send(self._target_hwnd, action)
         self._last_action = action
         return ExecutionReceipt(result=result, browser_sequence_before=sequence)
 

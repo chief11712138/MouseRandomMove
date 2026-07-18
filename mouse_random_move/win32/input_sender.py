@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import ctypes
 import random
@@ -19,6 +19,18 @@ KEYEVENTF_KEYUP = 0x0002
 INPUT_MOUSE = 0
 INPUT_KEYBOARD = 1
 WHEEL_DELTA = 120
+MODIFIER_VIRTUAL_KEYS = {
+    "CTRL": 0x11,
+    "SHIFT": 0x10,
+    "ALT": 0x12,
+    "WIN": 0x5B,
+}
+MODIFIER_DISPLAY_NAMES = {
+    "CTRL": "Ctrl",
+    "SHIFT": "Shift",
+    "ALT": "Alt",
+    "WIN": "Win",
+}
 
 
 class TargetWindowError(RuntimeError):
@@ -101,7 +113,7 @@ class WindowInputSender:
         self._configure_signatures()
         self._last_point_by_hwnd: dict[int, tuple[int, int]] = {}
 
-    def send(self, hwnd: int, action: str) -> ActionResult:
+    def send(self, hwnd: int, action: str, *, shortcut: str = "") -> ActionResult:
         target = self.window_service.inspect(hwnd)
         if target is None:
             raise TargetWindowError("选定的 Chrome 窗口已经关闭或不可用。")
@@ -154,6 +166,22 @@ class WindowInputSender:
             # Click the page first so the address bar or another application cannot retain focus.
             self._set_cursor(x, y)
             self._mouse_click()
+            if shortcut:
+                modifiers, key = self._parse_shortcut(shortcut)
+                self._send_shortcut(modifiers, key)
+                combination = "+".join(
+                    (*(MODIFIER_DISPLAY_NAMES[name] for name in modifiers), key)
+                )
+                return ActionResult(
+                    action="keyboard",
+                    description=f'向目标页面发送组合键 "{combination}"',
+                    expected_browser_event="keydown",
+                    x=x,
+                    y=y,
+                    text=combination,
+                    browser_confirmation_supported=confirmation_supported,
+                )
+
             text = "".join(
                 self.rng.choice(string.ascii_lowercase + string.digits)
                 for _ in range(self.rng.randint(3, 6))
@@ -256,6 +284,45 @@ class WindowInputSender:
         )
         self._send_inputs(inputs)
 
+    @staticmethod
+    def _parse_shortcut(shortcut: str) -> tuple[tuple[str, ...], str]:
+        parts = tuple(part.strip().upper() for part in shortcut.split("+") if part.strip())
+        if len(parts) < 2:
+            raise TargetWindowError(f"不支持的组合键：{shortcut}")
+        modifiers = parts[:-1]
+        key = parts[-1]
+        if (
+            any(name not in MODIFIER_VIRTUAL_KEYS for name in modifiers)
+            or len(set(modifiers)) != len(modifiers)
+            or len(key) != 1
+            or key not in string.ascii_uppercase + string.digits
+        ):
+            raise TargetWindowError(f"不支持的组合键：{shortcut}")
+        return modifiers, key
+
+    def _send_shortcut(self, modifiers: tuple[str, ...], key: str) -> None:
+        virtual_keys = [MODIFIER_VIRTUAL_KEYS[name] for name in modifiers]
+        events = [
+            INPUT(type=INPUT_KEYBOARD, ki=KEYBDINPUT(wVk=virtual_key))
+            for virtual_key in virtual_keys
+        ]
+        events.append(INPUT(type=INPUT_KEYBOARD, ki=KEYBDINPUT(wVk=ord(key))))
+        events.append(
+            INPUT(
+                type=INPUT_KEYBOARD,
+                ki=KEYBDINPUT(wVk=ord(key), dwFlags=KEYEVENTF_KEYUP),
+            )
+        )
+        events.extend(
+            INPUT(
+                type=INPUT_KEYBOARD,
+                ki=KEYBDINPUT(wVk=virtual_key, dwFlags=KEYEVENTF_KEYUP),
+            )
+            for virtual_key in reversed(virtual_keys)
+        )
+        inputs = (INPUT * len(events))(*events)
+        self._send_inputs(inputs)
+
     def _send_ascii_text(self, text: str) -> None:
         for character in text:
             virtual_key = self.user32.VkKeyScanW(character) & 0xFF
@@ -295,4 +362,3 @@ class WindowInputSender:
         self.user32.SendInput.restype = wintypes.UINT
         self.user32.VkKeyScanW.argtypes = [wintypes.WCHAR]
         self.user32.VkKeyScanW.restype = ctypes.c_short
-

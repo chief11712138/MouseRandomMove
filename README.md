@@ -1,100 +1,106 @@
-﻿# Mouse Random Move
+# Nethard Music
 
-Mouse Random Move 是一个面向 Windows 11 的单窗口鼠标与键盘输入模拟工具。它可以向用户明确选中的任意可见 Chrome 顶层窗口发送随机移动、点击、滚轮和键盘动作。本机测试页面是可选的，用于验证并记录浏览器事件。
+Nethard Music（项目原名 Mouse Random Move）是一个面向 Windows 11 的单窗口输入自动化工具。它只向用户明确选择的一个可见 Chrome 顶层窗口发送鼠标移动、单击、滚轮或键盘动作，并提供亮色高对比界面、后台状态显示和可恢复的鼠标穿透模式。
 
-## 功能概览
+## 主要功能
 
-- 枚举当前所有可见 Chrome 顶层窗口。
-- 下拉框只显示窗口标题，不暴露 HWND、进程 ID 等内部编号。
-- 同名窗口会追加“同名窗口 1/2”等可读后缀，方便区分。
-- 每次运行只锁定一个选中的 Chrome 窗口，不会广播到其他窗口。
-- 点击“开始”后会立即找到并自动聚焦选中的 Chrome 窗口，无需再手动点击窗口。
-- 运行期间禁止切换目标窗口，避免误操作。
-- 如果目标窗口关闭或不再是 Chrome 窗口，任务会立即停止。
-- 支持随机鼠标移动、单击、滚轮和普通字母数字键盘输入。
-- “下一次操作”按秒实时倒计时。
-- 固定高度的滚动区域会显示每一条已发送命令及发送时间。
-- 可选的配套测试页面运行在 `127.0.0.1`，用于记录并回传浏览器事件。
-- 桌面端会把动作发送、可用的页面确认和错误信息写入 CSV 日志。
+- 枚举可见 Chrome 顶层窗口，并用可读名称区分同名窗口。
+- 开始运行前自动聚焦目标；运行期间锁定目标，避免输入发送到其他窗口。
+- 支持随机鼠标移动、单击、滚轮和键盘输入。
+- 键盘快捷键支持任意组合的 `Ctrl / Shift / Alt / Win + A-Z / 0-9`，不使用 F 功能键。
+- 快捷键完全留空时，键盘动作会随机输入 3–6 个字母或数字。
+- 操作间隔可设置最小值和最大值；运行分钟设为 `0` 时持续运行。
+- 使用 ttkbootstrap 的亮色高对比主题，提供全量模式和简易模式。
+- 支持 40%–100% 透明度、长期置顶和鼠标穿透点击。
+- 内置本地测试页面，可确认测试页收到的浏览器事件。
+- 将启动、停止、动作发送、页面确认和错误写入本地 CSV 日志。
 
-## 目标窗口与安全提示
+## 界面模式
 
-程序会列出可见的 Chrome 顶层窗口。选择目标并开始后，每次运行仍只锁定一个窗口，不会向其他窗口广播。输入是真实的系统鼠标和键盘输入，因此请避免选择含有未保存内容、支付操作或其他重要数据的页面。
+### 简易模式
 
-标题包含以下文本的本机测试页面还可以回传事件确认：
+简易模式尽量利用整个窗口，适合长期置顶并在不切换焦点时查看和操作。界面显示：
+
+- 当前是否正在运行；
+- 占用整行的目标页面名称；
+- 当前启用的移动、单击、滚轮和键盘功能；
+- 可编辑的运行快捷键、操作间隔和运行分钟；
+- 开始、停止、发送一次、透明度、置顶和穿透点击控制。
+
+切换界面模式只改变布局，不会重建控制器、取消后台计时器或改变已经锁定的目标。
+
+### 全量模式
+
+全量模式在完整配置之外显示目标状态、下次动作倒计时、最近动作、测试页事件状态和已发送命令历史，适合配置与排查。
+
+## 穿透点击与恢复
+
+启用“穿透点击”后，鼠标点击会穿过 Nethard Music 窗口并作用于后方窗口。
+
+恢复快捷键固定为：
 
 ```text
-Mouse Random Move Test
+Ctrl + Shift + Alt + X
 ```
 
-其他 Chrome 页面可以接收输入，但无法向本地程序回传确认，所以界面只报告“已发送”。Chrome 仍然是当前版本的目标浏览器，项目名称中的 Mouse Random Move 指的是工具的用途，而不是浏览器替代品。
+该快捷键会一直显示在简易模式底部和全量模式的窗口设置区域。全局恢复热键只在穿透模式启用期间注册；按下后会立即关闭穿透并恢复正常点击。如果快捷键已被其他程序占用，程序不会进入穿透模式。
 
-## 项目结构
+## 系统要求
 
-```text
-main.py
-mouse_random_move/
-  app.py                     Tkinter 桌面界面
-  config.py                  运行配置校验
-  controller.py              单窗口运行控制器
-  chrome_launcher.py         Chrome 启动与测试页打开
-  event_log.py               CSV 审计日志
-  paths.py                   源码/EXE 资源路径
-  win32/
-    chrome_windows.py        Chrome 窗口枚举与可读标题
-    input_sender.py          Win32 输入发送
-    dpi.py                   Windows DPI 适配
-  web/
-    server.py                本地 HTTP/API 服务
-  frontend/
-    index.html               配套检测页面
-    styles.css               页面样式
-    app.js                   事件检测与回传
-tests/
-  test_config.py
-  test_countdown.py
-  test_controller.py
-  test_window_labels.py
-```
+- Windows 11；
+- 64 位 Python 3.12 或更高版本；
+- Google Chrome；
+- PowerShell。
 
-## 运行方式
+## 安装与运行
 
-1. 在 Windows 11 中安装 64 位 Python 3.12 或更新版本。
-2. 确认已安装 Google Chrome。
-3. 在项目根目录运行：
+在项目根目录执行：
 
 ```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 python main.py
 ```
 
-4. 程序会自动打开并选中配套测试页；先点击“发送一次”，确认动作和页面回传正常。
-5. 验证完成后关闭测试页。
-6. 点击“刷新列表”，选择实际需要操作的 Chrome 窗口。
-7. 配置动作与间隔后点击“开始”，程序会立即自动聚焦所选窗口。
+程序启动后会打开本地测试页。完成验证后可关闭测试页，点击“刷新列表”，再选择实际目标 Chrome 页面。
 
-## 打包 EXE
+## 使用流程
 
-如果项目中包含打包脚本，可在 PowerShell 中运行：
+1. 选择目标 Chrome 页面。
+2. 选择要启用的动作。
+3. 如需固定键盘组合，选择至少一个修饰键和一个 `A-Z` 或 `0-9` 主键；不需要时全部留空。
+4. 设置操作间隔和运行分钟。
+5. 点击“发送一次”验证配置，或点击“开始”连续运行。
+6. 点击“停止”结束任务。
+
+输入是 Windows 的真实鼠标和键盘输入。请勿选择包含未保存内容、支付操作或其他重要数据的页面。目标窗口关闭、失效或过小时，任务会停止或拒绝发送。
+
+## 测试
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+测试覆盖配置校验、普通键组合、输入事件顺序、倒计时、单窗口控制、简易模式布局和穿透恢复。
+
+## 构建 EXE
+
+先关闭正在运行的 `Nethard Music.exe`，然后执行：
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\build.ps1
 ```
 
-建议输出文件命名为：
+构建脚本会使用项目虚拟环境中的 PyInstaller；如果虚拟环境中不可用，则尝试全局 `pyinstaller`。构建成功后自动生成并命名为：
 
 ```text
-dist\MouseRandomMove.exe
+dist\Nethard Music.exe
 ```
 
-## Hyper-V 注意事项
-
-- 宿主机和客户机都使用 Windows 11 时，输入只会发生在客户机桌面会话中。
-- 客户机必须保持解锁，不能处于暂停、保存或睡眠状态。
-- 建议使用增强会话模式，并保持合理显示缩放。
-- 程序会先把选定 Chrome 窗口激活到前台，再发送动作。
-- 不需要管理员权限、外网访问或浏览器扩展。
-- Chrome 窗口过小时会拒绝执行，以避免点击浏览器工具栏。
+`build/`、`dist/`、虚拟环境、Python 缓存和 IDE 本地配置均为可再生成文件，不纳入 Git。
 
 ## 日志
 
@@ -104,4 +110,29 @@ dist\MouseRandomMove.exe
 %LOCALAPPDATA%\MouseRandomMove\logs
 ```
 
-每个日志文件按日期生成，记录开始、停止、动作发送、页面确认和错误信息。
+每个 CSV 文件按日期生成，记录运行配置、目标、动作、确认结果和错误。
+
+## 项目结构
+
+```text
+main.py                              程序入口
+build.ps1                            构建并命名 Nethard Music.exe
+Mouse Random Move.spec               PyInstaller 正式配置
+mouse_random_move/
+  app.py                             窗口、运行状态和调度基础
+  light_console.py                   亮色全量/简易界面
+  light_product.py                   产品帮助信息
+  click_through_app.py               穿透点击与安全恢复热键
+  config.py                          配置解析与校验
+  controller.py                      单目标动作控制
+  chrome_launcher.py                 Chrome 与测试页启动
+  event_log.py                       CSV 日志
+  paths.py                           源码和打包资源路径
+  frontend/                          本地事件测试页面
+  web/server.py                      本地测试服务
+  win32/
+    chrome_windows.py                Chrome 窗口枚举
+    dpi.py                           DPI 适配
+    input_sender.py                  鼠标、滚轮和普通组合键发送
+tests/                               单元测试
+```

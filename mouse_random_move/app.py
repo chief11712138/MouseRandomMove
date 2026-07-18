@@ -1,10 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import random
 import tkinter as tk
 from datetime import datetime, timedelta
 from math import ceil
-from tkinter import messagebox, ttk
+from tkinter import messagebox
+
+import ttkbootstrap as ttk
 
 from .chrome_launcher import ChromeNotFoundError, open_test_page
 from .config import ConfigError, RunConfig
@@ -30,15 +32,17 @@ class MouseRandomMoveApp:
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Mouse Random Move")
+        self.root.title("Nethard Music")
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-        window_width = min(1000, max(820, screen_width - 80))
-        window_height = min(900, max(700, screen_height - 100))
+        window_width = max(1000, min(1240, screen_width - 80))
+        window_height = max(640, min(720, screen_height - 100))
         window_x = max(0, (screen_width - window_width) // 2)
         window_y = max(0, (screen_height - window_height) // 2)
         self.root.geometry(f"{window_width}x{window_height}+{window_x}+{window_y}")
-        self.root.minsize(min(900, window_width), min(760, window_height))
+        self.root.minsize(min(960, window_width), min(600, window_height))
+        self._full_window_size = (window_width, window_height)
+        self._simple_window_size = (min(540, window_width), min(390, window_height))
 
         self.rng = random.Random()
         self.window_service = ChromeWindowService()
@@ -66,6 +70,16 @@ class MouseRandomMoveApp:
         self.enable_click = tk.BooleanVar(value=True)
         self.enable_wheel = tk.BooleanVar(value=True)
         self.enable_keyboard = tk.BooleanVar(value=True)
+        self.shortcut_ctrl = tk.BooleanVar(value=False)
+        self.shortcut_shift = tk.BooleanVar(value=False)
+        self.shortcut_alt = tk.BooleanVar(value=False)
+        self.shortcut_win = tk.BooleanVar(value=False)
+        self.shortcut_key = tk.StringVar(value="")
+        self.ui_mode = tk.StringVar(value="simple")
+        self.always_on_top = tk.BooleanVar(value=True)
+        self.window_opacity = tk.DoubleVar(value=95.0)
+        self.opacity_text = tk.StringVar(value="透明度 95%")
+        self.start_button_text = tk.StringVar(value="开始")
 
         self.status_text = tk.StringVar(value="状态：已停止")
         self.next_action_text = tk.StringVar(value="下一次操作：无")
@@ -81,159 +95,522 @@ class MouseRandomMoveApp:
         self.root.after(250, self.open_test_page)
 
     def _build_ui(self) -> None:
-        outer = ttk.Frame(self.root, padding=16)
-        outer.pack(fill=tk.BOTH, expand=True)
+        self.root.configure(background="#111827")
 
+        self.shell = ttk.Frame(self.root, padding=12, bootstyle="dark")
+        self.shell.pack(fill=tk.BOTH, expand=True)
+
+        self._build_header()
+
+        self.view_host = ttk.Frame(self.shell, bootstyle="dark")
+        self.view_host.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+
+        self.full_view = ttk.Frame(self.view_host, bootstyle="dark")
+        self.simple_view = ttk.Frame(self.view_host, bootstyle="dark")
+        self._build_full_view()
+        self._build_simple_view()
+        self._sync_keyboard_controls()
+
+        self._set_always_on_top()
+        self._set_opacity(str(self.window_opacity.get()))
+        self._update_run_visual(False)
+        self._set_ui_mode(self.ui_mode.get())
+
+    def _build_header(self) -> None:
+        self.header = ttk.Frame(self.shell, bootstyle="dark")
+        self.header.pack(fill=tk.X)
+        header = self.header
+
+        brand = ttk.Frame(header, bootstyle="dark")
+        brand.pack(side=tk.LEFT)
         ttk.Label(
-            outer,
-            text="Mouse Random Move",
-            font=("Segoe UI", 16, "bold"),
+            brand,
+            text="NETHARD MUSIC",
+            font=("Segoe UI Semibold", 15),
+            bootstyle="info",
         ).pack(anchor=tk.W)
         ttk.Label(
-            outer,
-            text="单窗口模式：每次动作只发送到当前选中的一个 Chrome 窗口",
-        ).pack(anchor=tk.W, pady=(2, 12))
+            brand,
+            text="单窗口输入自动化 · 后台状态监视器",
+            font=("Segoe UI", 9),
+            bootstyle="secondary",
+        ).pack(anchor=tk.W)
 
-        target_frame = ttk.LabelFrame(outer, text="Chrome 目标窗口", padding=12)
-        target_frame.pack(fill=tk.X)
-        target_frame.columnconfigure(1, weight=1)
+        mode_bar = ttk.Frame(header, bootstyle="dark")
+        mode_bar.pack(side=tk.RIGHT)
+        ttk.Button(
+            mode_bar,
+            text="说明",
+            command=self._show_help,
+            bootstyle="secondary-outline",
+            width=6,
+        ).pack(side=tk.RIGHT, padx=(6, 0))
+        self.full_mode_button = ttk.Button(
+            mode_bar,
+            text="全量模式",
+            command=lambda: self._set_ui_mode("full"),
+            width=9,
+        )
+        self.full_mode_button.pack(side=tk.RIGHT, padx=(6, 0))
+        self.simple_mode_button = ttk.Button(
+            mode_bar,
+            text="简易模式",
+            command=lambda: self._set_ui_mode("simple"),
+            width=9,
+        )
+        self.simple_mode_button.pack(side=tk.RIGHT)
 
-        ttk.Label(target_frame, text="窗口名称").grid(row=0, column=0, sticky=tk.W)
+    def _build_full_view(self) -> None:
+        self.full_view.columnconfigure(0, weight=3)
+        self.full_view.columnconfigure(1, weight=2)
+        self.full_view.rowconfigure(1, weight=1)
+
+        summary = ttk.Labelframe(
+            self.full_view,
+            text="实时状态",
+            padding=10,
+            bootstyle="info",
+        )
+        summary.grid(row=0, column=0, columnspan=2, sticky=tk.EW, pady=(0, 10))
+        summary.columnconfigure(0, weight=1)
+        summary.columnconfigure(1, weight=1)
+        self.full_status_label = ttk.Label(
+            summary,
+            textvariable=self.status_text,
+            font=("Segoe UI Semibold", 11),
+            bootstyle="secondary",
+        )
+        self.full_status_label.grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(
+            summary,
+            textvariable=self.next_action_text,
+            font=("Segoe UI Semibold", 11),
+            bootstyle="warning",
+        ).grid(row=0, column=1, sticky=tk.E)
+        ttk.Label(
+            summary,
+            textvariable=self.selected_status_text,
+            wraplength=900,
+            bootstyle="light",
+        ).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(6, 0))
+
+        left = ttk.Frame(self.full_view, bootstyle="dark")
+        left.grid(row=1, column=0, sticky=tk.NSEW, padx=(0, 6))
+        left.columnconfigure(0, weight=1)
+
+        target = ttk.Labelframe(left, text="目标窗口", padding=10, bootstyle="primary")
+        target.grid(row=0, column=0, sticky=tk.EW)
+        target.columnconfigure(0, weight=1)
         self.window_combo = ttk.Combobox(
-            target_frame,
+            target,
             textvariable=self.selected_window_name,
             state="readonly",
-            width=78,
         )
-        self.window_combo.grid(row=0, column=1, padx=(8, 8), sticky=tk.EW)
+        self.window_combo.grid(row=0, column=0, sticky=tk.EW)
         self.window_combo.bind("<<ComboboxSelected>>", self._on_window_selected)
-
         self.refresh_button = ttk.Button(
-            target_frame,
-            text="刷新列表",
+            target,
+            text="刷新",
             command=self.refresh_windows,
+            bootstyle="primary-outline",
+            width=7,
         )
-        self.refresh_button.grid(row=0, column=2, padx=(0, 8))
-
+        self.refresh_button.grid(row=0, column=1, padx=(8, 0))
         ttk.Button(
-            target_frame,
-            text="打开配套测试页",
+            target,
+            text="测试页",
             command=self.open_test_page,
-        ).grid(row=0, column=3)
-
+            bootstyle="info-outline",
+            width=8,
+        ).grid(row=0, column=2, padx=(8, 0))
         ttk.Label(
-            target_frame,
-            textvariable=self.selected_status_text,
-            wraplength=820,
-        ).grid(row=1, column=0, columnspan=4, pady=(10, 0), sticky=tk.W)
+            target,
+            text="输入会真实作用于所选 Chrome 页面，请避开重要数据窗口。",
+            bootstyle="danger",
+            font=("Segoe UI", 8),
+        ).grid(row=1, column=0, columnspan=3, sticky=tk.W, pady=(6, 0))
+
+        settings = ttk.Labelframe(left, text="运行参数", padding=10, bootstyle="secondary")
+        settings.grid(row=1, column=0, sticky=tk.EW, pady=(8, 0))
+        for column in (1, 3, 5):
+            settings.columnconfigure(column, weight=1)
+
+        ttk.Label(settings, text="最小间隔/秒").grid(row=0, column=0, sticky=tk.W)
+        ttk.Entry(settings, textvariable=self.min_delay, width=7).grid(
+            row=0, column=1, padx=(6, 12), sticky=tk.EW
+        )
+        ttk.Label(settings, text="最大间隔/秒").grid(row=0, column=2, sticky=tk.W)
+        ttk.Entry(settings, textvariable=self.max_delay, width=7).grid(
+            row=0, column=3, padx=(6, 12), sticky=tk.EW
+        )
+        ttk.Label(settings, text="运行分钟").grid(row=0, column=4, sticky=tk.W)
+        ttk.Entry(settings, textvariable=self.duration_minutes, width=7).grid(
+            row=0, column=5, padx=(6, 0), sticky=tk.EW
+        )
+
+        ttk.Label(settings, text="动作").grid(row=1, column=0, sticky=tk.W, pady=(10, 0))
+        ttk.Checkbutton(
+            settings,
+            text="移动",
+            variable=self.enable_move,
+            bootstyle="info",
+        ).grid(row=1, column=1, sticky=tk.W, pady=(10, 0))
+        ttk.Checkbutton(
+            settings,
+            text="单击",
+            variable=self.enable_click,
+            bootstyle="info",
+        ).grid(row=1, column=2, sticky=tk.W, pady=(10, 0))
+        ttk.Checkbutton(
+            settings,
+            text="滚轮",
+            variable=self.enable_wheel,
+            bootstyle="info",
+        ).grid(row=1, column=3, sticky=tk.W, pady=(10, 0))
+        ttk.Checkbutton(
+            settings,
+            text="键盘",
+            variable=self.enable_keyboard,
+            command=self._sync_keyboard_controls,
+            bootstyle="info",
+        ).grid(row=1, column=4, sticky=tk.W, pady=(10, 0))
+
+        ttk.Label(settings, text="运行快捷键").grid(
+            row=2, column=0, sticky=tk.W, pady=(10, 0)
+        )
+        shortcut = ttk.Frame(settings)
+        shortcut.grid(
+            row=2,
+            column=1,
+            columnspan=5,
+            sticky=tk.W,
+            pady=(10, 0),
+        )
+        self.full_modifier_controls = []
+        for text, variable in self._modifier_options():
+            control = ttk.Checkbutton(
+                shortcut,
+                text=text,
+                variable=variable,
+                command=self._sync_keyboard_controls,
+            )
+            control.pack(side=tk.LEFT, padx=(0, 8))
+            self.full_modifier_controls.append(control)
+        self.full_shortcut_key_combo = ttk.Combobox(
+            shortcut,
+            textvariable=self.shortcut_key,
+            values=("", *RunConfig.SHORTCUT_KEYS),
+            state="readonly",
+            width=6,
+        )
+        self.full_shortcut_key_combo.pack(side=tk.LEFT)
         ttk.Label(
-            target_frame,
-            text="注意：输入会真实作用于选中的 Chrome 页面，请避免选择含有重要数据的窗口。",
-            foreground="#8b0000",
-        ).grid(row=2, column=0, columnspan=4, pady=(6, 0), sticky=tk.W)
+            shortcut,
+            text="组合键留空时随机输入；0 分钟表示持续运行。",
+            bootstyle="secondary",
+        ).pack(side=tk.LEFT, padx=(10, 0))
 
-        settings = ttk.LabelFrame(outer, text="运行设置", padding=12)
-        settings.pack(fill=tk.X, pady=(12, 0))
-
-        ttk.Label(settings, text="最小间隔（秒）").grid(row=0, column=0, sticky=tk.W)
-        ttk.Entry(settings, textvariable=self.min_delay, width=10).grid(
-            row=0, column=1, padx=(8, 24), sticky=tk.W
+        action_bar = ttk.Labelframe(left, text="控制", padding=10, bootstyle="success")
+        action_bar.grid(row=2, column=0, sticky=tk.EW, pady=(8, 0))
+        self.start_button = ttk.Button(
+            action_bar,
+            textvariable=self.start_button_text,
+            command=self.start,
+            bootstyle="success",
+            width=9,
         )
-        ttk.Label(settings, text="最大间隔（秒）").grid(row=0, column=2, sticky=tk.W)
-        ttk.Entry(settings, textvariable=self.max_delay, width=10).grid(
-            row=0, column=3, padx=(8, 24), sticky=tk.W
-        )
-        ttk.Label(settings, text="运行分钟数").grid(row=0, column=4, sticky=tk.W)
-        ttk.Entry(settings, textvariable=self.duration_minutes, width=10).grid(
-            row=0, column=5, padx=(8, 0), sticky=tk.W
-        )
-
-        ttk.Label(settings, text="动作类型").grid(row=1, column=0, pady=(12, 0), sticky=tk.W)
-        ttk.Checkbutton(settings, text="移动", variable=self.enable_move).grid(
-            row=1, column=1, pady=(12, 0), sticky=tk.W
-        )
-        ttk.Checkbutton(settings, text="单击", variable=self.enable_click).grid(
-            row=1, column=2, pady=(12, 0), sticky=tk.W
-        )
-        ttk.Checkbutton(settings, text="滚轮", variable=self.enable_wheel).grid(
-            row=1, column=3, pady=(12, 0), sticky=tk.W
-        )
-        ttk.Checkbutton(settings, text="键盘", variable=self.enable_keyboard).grid(
-            row=1, column=4, pady=(12, 0), sticky=tk.W
-        )
-        ttk.Label(settings, text="0 分钟表示持续运行").grid(
-            row=1, column=5, pady=(12, 0), sticky=tk.W
-        )
-
-        controls = ttk.Frame(outer)
-        controls.pack(fill=tk.X, pady=12)
-        self.start_button = ttk.Button(controls, text="开始", command=self.start)
         self.start_button.pack(side=tk.LEFT)
-        ttk.Button(controls, text="停止", command=self.stop).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            action_bar,
+            text="停止",
+            command=self.stop,
+            bootstyle="danger-outline",
+            width=9,
+        ).pack(side=tk.LEFT, padx=(8, 0))
         self.send_once_button = ttk.Button(
-            controls,
+            action_bar,
             text="发送一次",
             command=self.send_once,
+            bootstyle="primary-outline",
+            width=10,
         )
         self.send_once_button.pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(
-            controls,
-            text="清空页面检测记录",
+            action_bar,
+            text="清空检测",
             command=self._reset_browser_events,
+            bootstyle="secondary-outline",
+            width=10,
         ).pack(side=tk.LEFT, padx=(8, 0))
 
-        status = ttk.LabelFrame(outer, text="运行状态", padding=12)
-        status.pack(fill=tk.X)
-        ttk.Label(status, textvariable=self.status_text).pack(anchor=tk.W)
-        ttk.Label(status, textvariable=self.next_action_text).pack(anchor=tk.W, pady=(4, 0))
-        ttk.Label(
-            status,
-            textvariable=self.last_action_text,
-            wraplength=930,
-        ).pack(anchor=tk.W, pady=(4, 0))
-        ttk.Label(
-            status,
-            textvariable=self.browser_status_text,
-            wraplength=930,
-        ).pack(anchor=tk.W, pady=(4, 0))
+        preferences = ttk.Labelframe(
+            left,
+            text="窗口显示",
+            padding=10,
+            bootstyle="secondary",
+        )
+        preferences.grid(row=3, column=0, sticky=tk.EW, pady=(8, 0))
+        preferences.columnconfigure(1, weight=1)
+        ttk.Label(preferences, textvariable=self.opacity_text).grid(
+            row=0, column=0, sticky=tk.W
+        )
+        ttk.Scale(
+            preferences,
+            from_=40,
+            to=100,
+            variable=self.window_opacity,
+            command=self._set_opacity,
+            bootstyle="info",
+        ).grid(row=0, column=1, padx=10, sticky=tk.EW)
+        ttk.Checkbutton(
+            preferences,
+            text="始终置顶",
+            variable=self.always_on_top,
+            command=self._set_always_on_top,
+            bootstyle="success",
+        ).grid(row=0, column=2, sticky=tk.E)
 
-        command_frame = ttk.LabelFrame(outer, text="已发送命令", padding=8)
-        command_frame.pack(fill=tk.X, pady=(12, 0))
+        right = ttk.Frame(self.full_view, bootstyle="dark")
+        right.grid(row=1, column=1, sticky=tk.NSEW, padx=(6, 0))
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(1, weight=1)
+
+        details = ttk.Labelframe(right, text="状态详情", padding=10, bootstyle="warning")
+        details.grid(row=0, column=0, sticky=tk.EW)
+        ttk.Label(
+            details,
+            textvariable=self.last_action_text,
+            wraplength=400,
+            bootstyle="light",
+        ).pack(anchor=tk.W)
+        ttk.Separator(details).pack(fill=tk.X, pady=8)
+        ttk.Label(
+            details,
+            textvariable=self.browser_status_text,
+            wraplength=400,
+            bootstyle="secondary",
+        ).pack(anchor=tk.W)
+
+        command_frame = ttk.Labelframe(
+            right,
+            text="已发送命令",
+            padding=8,
+            bootstyle="secondary",
+        )
+        command_frame.grid(row=1, column=0, sticky=tk.NSEW, pady=(8, 0))
         command_frame.columnconfigure(0, weight=1)
         command_frame.rowconfigure(0, weight=1)
         self.command_log = tk.Text(
             command_frame,
-            height=8,
+            height=12,
+            width=40,
             wrap=tk.WORD,
             state=tk.DISABLED,
-            font=("Consolas", 10),
+            font=("Cascadia Mono", 9),
+            background="#101820",
+            foreground="#d8e2ef",
+            insertbackground="#ffffff",
+            relief=tk.FLAT,
+            padx=8,
+            pady=8,
         )
         command_scrollbar = ttk.Scrollbar(
             command_frame,
             orient=tk.VERTICAL,
             command=self.command_log.yview,
+            bootstyle="round",
         )
         self.command_log.configure(yscrollcommand=command_scrollbar.set)
         self.command_log.grid(row=0, column=0, sticky=tk.NSEW)
         command_scrollbar.grid(row=0, column=1, sticky=tk.NS)
 
-        explanation = ttk.LabelFrame(outer, text="工作方式", padding=12)
-        explanation.pack(fill=tk.BOTH, expand=True, pady=(12, 0))
-        text = tk.Text(explanation, height=10, wrap=tk.WORD, state=tk.NORMAL)
-        text.pack(fill=tk.BOTH, expand=True)
-        text.insert(
-            "1.0",
-            "1. 程序启动后会自动打开并选中配套测试页。\n"
-            "2. 在测试页点击“发送一次”，确认所选动作和事件回传正常。\n"
-            "3. 验证后关闭测试页，点击“刷新列表”并选择需要操作的 Chrome 窗口。\n"
-            "4. 配置动作与间隔后点击“开始”；普通页面会显示动作已发送。\n"
-            "5. 每次仅锁定并操作一个窗口；运行中无法切换目标。\n"
-            "6. 勾选“键盘”后，程序会随机输入 3-6 个小写字母或数字。\n"
-            "7. 若目标窗口关闭或不再是 Chrome 窗口，任务会停止。\n\n"
+    def _build_simple_view(self) -> None:
+        self.simple_view.columnconfigure(0, weight=1)
+        self.simple_view.rowconfigure(0, weight=1)
+
+        card = ttk.Frame(self.simple_view, padding=16, bootstyle="secondary")
+        card.grid(row=0, column=0, sticky=tk.NSEW)
+        card.columnconfigure(0, weight=1)
+
+        top = ttk.Frame(card, bootstyle="secondary")
+        top.grid(row=0, column=0, sticky=tk.EW)
+        ttk.Label(
+            top,
+            text="后台状态",
+            font=("Segoe UI Semibold", 10),
+            bootstyle="info",
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            top,
+            text="全量",
+            command=lambda: self._set_ui_mode("full"),
+            bootstyle="info-outline",
+            width=7,
+        ).pack(side=tk.RIGHT, padx=(8, 0))
+        ttk.Checkbutton(
+            top,
+            text="置顶",
+            variable=self.always_on_top,
+            command=self._set_always_on_top,
+            bootstyle="success",
+        ).pack(side=tk.RIGHT)
+
+        self.simple_status_label = ttk.Label(
+            card,
+            textvariable=self.status_text,
+            font=("Segoe UI Semibold", 13),
+            bootstyle="secondary",
+        )
+        self.simple_status_label.grid(row=1, column=0, sticky=tk.W, pady=(12, 0))
+        ttk.Label(
+            card,
+            textvariable=self.next_action_text,
+            font=("Segoe UI Semibold", 20),
+            bootstyle="warning",
+        ).grid(row=2, column=0, sticky=tk.W, pady=(4, 0))
+
+        ttk.Separator(card).grid(row=3, column=0, sticky=tk.EW, pady=10)
+        ttk.Label(
+            card,
+            textvariable=self.selected_status_text,
+            wraplength=440,
+            bootstyle="light",
+        ).grid(row=4, column=0, sticky=tk.W)
+        ttk.Label(
+            card,
+            textvariable=self.last_action_text,
+            wraplength=440,
+            bootstyle="info",
+        ).grid(row=5, column=0, sticky=tk.W, pady=(6, 0))
+        ttk.Label(
+            card,
+            textvariable=self.browser_status_text,
+            wraplength=440,
+            bootstyle="secondary",
+            font=("Segoe UI", 8),
+        ).grid(row=6, column=0, sticky=tk.W, pady=(4, 0))
+
+        footer = ttk.Frame(card, bootstyle="secondary")
+        footer.grid(row=7, column=0, sticky=tk.EW, pady=(12, 0))
+        self.simple_start_button = ttk.Button(
+            footer,
+            textvariable=self.start_button_text,
+            command=self.start,
+            bootstyle="success",
+            width=9,
+        )
+        self.simple_start_button.pack(side=tk.LEFT)
+        ttk.Button(
+            footer,
+            text="停止",
+            command=self.stop,
+            bootstyle="danger-outline",
+            width=9,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Label(footer, textvariable=self.opacity_text, bootstyle="secondary").pack(
+            side=tk.RIGHT
+        )
+        ttk.Scale(
+            footer,
+            from_=40,
+            to=100,
+            variable=self.window_opacity,
+            command=self._set_opacity,
+            length=90,
+            bootstyle="info",
+        ).pack(side=tk.RIGHT, padx=(8, 8))
+
+    def _modifier_options(self):
+        return (
+            ("Ctrl", self.shortcut_ctrl),
+            ("Shift", self.shortcut_shift),
+            ("Alt", self.shortcut_alt),
+            ("Win", self.shortcut_win),
+        )
+
+    def _sync_keyboard_controls(self) -> None:
+        enabled = bool(self.enable_keyboard.get())
+        check_state = tk.NORMAL if enabled else tk.DISABLED
+        combo_state = "readonly" if enabled else "disabled"
+        for control in getattr(self, "simple_modifier_controls", []):
+            control.configure(state=check_state)
+        for control in getattr(self, "full_modifier_controls", []):
+            control.configure(state=check_state)
+        if hasattr(self, "simple_shortcut_key_combo"):
+            self.simple_shortcut_key_combo.configure(state=combo_state)
+        if hasattr(self, "full_shortcut_key_combo"):
+            self.full_shortcut_key_combo.configure(state=combo_state)
+
+    def _show_help(self) -> None:
+        messagebox.showinfo(
+            "使用说明",
+            "全量模式：配置目标、间隔、动作和组合键，并查看完整日志。\n"
+            "简易模式：只保留实时状态、倒计时、目标、最近动作和开始/停止按钮。\n\n"
+            "模式切换只改变界面，不会重建控制器、取消后台计时器或改变已锁定目标。\n"
+            "简易模式默认位于屏幕右上角并保持置顶；状态刷新不会抢占 Chrome 焦点。\n"
+            "透明度可在 40%–100% 之间调整。\n\n"
             f"本地测试页面：{self.server.url}\n"
             f"日志目录：{self.logger.log_dir}",
+            parent=self.root,
         )
-        text.configure(state=tk.DISABLED)
+
+    def _set_always_on_top(self) -> None:
+        self.root.attributes("-topmost", bool(self.always_on_top.get()))
+
+    def _set_opacity(self, raw_value: str) -> None:
+        try:
+            percent = round(float(raw_value))
+        except (TypeError, ValueError):
+            percent = 100
+        percent = max(40, min(100, percent))
+        self.opacity_text.set(f"透明度 {percent}%")
+        self.root.attributes("-alpha", percent / 100)
+
+    def _set_ui_mode(self, mode: str) -> None:
+        if mode not in {"full", "simple"}:
+            raise ValueError(f"Unknown UI mode: {mode}")
+
+        # Only swap visible frames. Scheduled jobs, controller state and target lock stay intact.
+        self.ui_mode.set(mode)
+        self.full_view.pack_forget()
+        self.simple_view.pack_forget()
+
+        if mode == "simple":
+            self.header.pack_forget()
+            self.simple_view.pack(fill=tk.BOTH, expand=True)
+            self.simple_mode_button.configure(bootstyle="info")
+            self.full_mode_button.configure(bootstyle="secondary-outline")
+            self.always_on_top.set(True)
+            self._set_always_on_top()
+            size = self._simple_window_size
+        else:
+            if not self.header.winfo_manager():
+                self.header.pack(fill=tk.X, before=self.view_host)
+            self.full_view.pack(fill=tk.BOTH, expand=True)
+            self.full_mode_button.configure(bootstyle="info")
+            self.simple_mode_button.configure(bootstyle="secondary-outline")
+            size = self._full_window_size
+
+        self._resize_window(size, anchor_right=mode == "simple")
+
+    def _resize_window(self, size: tuple[int, int], *, anchor_right: bool) -> None:
+        width, height = size
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        if anchor_right:
+            x = max(0, screen_width - width - 24)
+            y = min(48, max(0, screen_height - height))
+            self.root.minsize(min(500, width), min(350, height))
+        else:
+            x = max(0, min(self.root.winfo_x(), screen_width - width))
+            y = max(0, min(self.root.winfo_y(), screen_height - height))
+            self.root.minsize(min(960, width), min(600, height))
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _update_run_visual(self, running: bool) -> None:
+        bootstyle = "success" if running else "secondary"
+        self.full_status_label.configure(bootstyle=bootstyle)
+        self.simple_status_label.configure(bootstyle=bootstyle)
 
     def refresh_windows(self, *, prefer_test_page: bool = False) -> None:
         previous_hwnd = self._selected_window().hwnd if self._selected_window() else None
@@ -302,7 +679,8 @@ class MouseRandomMoveApp:
             else None
         )
         self._set_target_controls_enabled(False)
-        self.start_button.configure(text="运行中")
+        self.start_button_text.set("运行中")
+        self._update_run_visual(True)
         self.status_text.set(f"状态：运行中；已自动聚焦：{target.title}")
         self.logger.write(
             "start",
@@ -330,7 +708,8 @@ class MouseRandomMoveApp:
         self.server.store.set_active(False)
         self.controller.unlock_target()
         self._set_target_controls_enabled(True)
-        self.start_button.configure(text="开始")
+        self.start_button_text.set("开始")
+        self._update_run_visual(False)
         self.status_text.set("状态：已停止")
         self.next_action_text.set("下一次操作：无")
         if was_running:
@@ -464,6 +843,11 @@ class MouseRandomMoveApp:
                 enable_click=self.enable_click.get(),
                 enable_wheel=self.enable_wheel.get(),
                 enable_keyboard=self.enable_keyboard.get(),
+                shortcut_ctrl=self.shortcut_ctrl.get(),
+                shortcut_shift=self.shortcut_shift.get(),
+                shortcut_alt=self.shortcut_alt.get(),
+                shortcut_win=self.shortcut_win.get(),
+                shortcut_key=self.shortcut_key.get(),
             )
         except ConfigError as exc:
             messagebox.showerror("设置错误", str(exc), parent=self.root)
@@ -508,9 +892,12 @@ class MouseRandomMoveApp:
         )
 
     def _set_target_controls_enabled(self, enabled: bool) -> None:
+        target_state = tk.NORMAL if enabled else tk.DISABLED
         self.window_combo.configure(state="readonly" if enabled else "disabled")
-        self.refresh_button.configure(state=tk.NORMAL if enabled else tk.DISABLED)
-        self.send_once_button.configure(state=tk.NORMAL if enabled else tk.DISABLED)
+        self.refresh_button.configure(state=target_state)
+        self.send_once_button.configure(state=target_state)
+        self.start_button.configure(state=target_state)
+        self.simple_start_button.configure(state=target_state)
 
     def _poll_browser_status(self) -> None:
         snapshot = self.server.store.snapshot()
@@ -546,5 +933,3 @@ class MouseRandomMoveApp:
             self._status_poll_job = None
         self.server.stop()
         self.root.destroy()
-
-

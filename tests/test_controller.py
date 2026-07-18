@@ -1,6 +1,8 @@
 import random
 import unittest
+from unittest.mock import Mock
 
+from mouse_random_move.config import RunConfig
 from mouse_random_move.controller import ExecutionReceipt, SingleWindowController
 from mouse_random_move.web.server import BrowserEventStore
 from mouse_random_move.win32.input_sender import ActionResult
@@ -40,6 +42,40 @@ class ControllerConfirmationTests(unittest.TestCase):
         )
         self.store.add("click", {})
         self.assertTrue(self.controller.is_confirmed(receipt))
+
+
+class ControllerShortcutTests(unittest.TestCase):
+    def test_keyboard_action_forwards_modifier_shortcut(self) -> None:
+        sender = Mock()
+        sender.send.return_value = ActionResult(
+            action="keyboard",
+            description="Ctrl+Shift+M",
+            expected_browser_event="keydown",
+        )
+        rng = Mock()
+        rng.choice.return_value = "keyboard"
+        controller = SingleWindowController(
+            sender=sender,
+            browser_events=BrowserEventStore(),
+            rng=rng,
+        )
+        controller.lock_target(123)
+        config = RunConfig(
+            enable_move=False,
+            enable_click=False,
+            enable_wheel=False,
+            enable_keyboard=True,
+            shortcut_modifiers=("CTRL", "SHIFT"),
+            shortcut_key="M",
+        )
+
+        controller.execute_once(config)
+
+        sender.send.assert_called_once_with(
+            123,
+            "keyboard",
+            shortcut="CTRL+SHIFT+M",
+        )
 
 
 if __name__ == "__main__":
