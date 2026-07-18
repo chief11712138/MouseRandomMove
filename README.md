@@ -87,18 +87,35 @@ python -m unittest discover -s tests -v
 
 ## 构建 EXE
 
-先关闭正在运行的 `Nethard Music.exe`，然后执行：
+先关闭正在运行的 `Nethard Music.exe`。最简单的方式是在资源管理器中双击：
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\build.ps1
+```text
+build.cmd
 ```
 
-构建脚本会使用项目虚拟环境中的 PyInstaller；如果虚拟环境中不可用，则尝试全局 `pyinstaller`。构建成功后自动生成并命名为：
+`build.cmd` 会绕过 PowerShell 执行策略、调用 `build.ps1`，并在成功或失败后等待按下 Enter，因此错误信息不会一闪而过。
+
+也可以直接从 PowerShell 执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+如果系统已将 `.ps1` 关联到 PowerShell，也可以直接双击 `build.ps1`；脚本会尝试识别资源管理器启动方式并保留窗口。
+
+脚本会自动：
+
+1. 查找 64 位 Python 3.12 或更高版本；
+2. 在缺失时创建项目内的 `.venv`；
+3. 根据 `requirements.txt` 安装或更新构建依赖；
+4. 运行 PyInstaller；
+5. 将结果命名为：
 
 ```text
 dist\Nethard Music.exe
 ```
+
+首次构建需要能够安装 Python 依赖。后续构建会复用 `.venv`，只有依赖文件发生变化时才重新安装。
 
 `build/`、`dist/`、虚拟环境、Python 缓存和 IDE 本地配置均为可再生成文件，不纳入 Git。
 
@@ -116,7 +133,8 @@ dist\Nethard Music.exe
 
 ```text
 main.py                              程序入口
-build.ps1                            构建并命名 Nethard Music.exe
+build.cmd                            双击构建入口（保留结果窗口）
+build.ps1                            自动准备环境并构建 EXE
 Mouse Random Move.spec               PyInstaller 正式配置
 mouse_random_move/
   app.py                             窗口、运行状态和调度基础
