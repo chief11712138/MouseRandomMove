@@ -1,10 +1,14 @@
 import unittest
 
+from mouse_random_move import light_console
 from mouse_random_move.config import RunConfig
 from mouse_random_move.light_console import LightControlConsoleApp
 
 
 class LightConsoleTests(unittest.TestCase):
+    def test_console_exposes_shortcut_configuration(self) -> None:
+        self.assertIs(light_console.RunConfig, RunConfig)
+
     def test_shortcut_keys_exclude_function_keys(self) -> None:
         self.assertIn("M", RunConfig.SHORTCUT_KEYS)
         self.assertIn("0", RunConfig.SHORTCUT_KEYS)

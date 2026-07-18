@@ -6,6 +6,7 @@ import tkinter as tk
 import ttkbootstrap as ttk
 
 from .app import MouseRandomMoveApp
+from .config import RunConfig
 
 
 BG = "#f2f5f9"
